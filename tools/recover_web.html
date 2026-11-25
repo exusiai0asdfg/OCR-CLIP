@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'none'; img-src 'none'; base-uri 'none'; form-action 'none'">
+<title>OCL Web 图片人工恢复</title>
+<style>
+:root {
+  color-scheme: light;
+  font-family: system-ui, "Microsoft YaHei UI", sans-serif;
+  color: #182429;
+  background: #f3f6f6;
+  font-size: 16px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 68rem; margin: 0 auto; padding: clamp(1rem, 4vw, 3rem); }
+h1 { font-size: clamp(1.5rem, 4vw, 2.3rem); margin: 0 0 .55rem; }
+h2 { font-size: 1.15rem; margin: 1.8rem 0 .6rem; }
+h3 { font-size: 1rem; margin: 0; }
+p { margin: .35rem 0; line-height: 1.55; }
+.muted { color: #4a5b61; }
+.stats, .filters, .actions { display: flex; flex-wrap: wrap; gap: .65rem; }
+.stats { margin: 1.25rem 0; }
+.stat {
+  min-width: 7rem; flex: 1; background: white; padding: .65rem .85rem;
+  border: 1px solid #ccd9db; border-radius: .55rem;
+}
+.stat strong { display: block; font-size: 1.5rem; }
+.filters { margin: 1rem 0 .6rem; align-items: end; }
+.filters label { display: grid; gap: .25rem; }
+.search { flex: 1 1 17rem; }
+button, select, input {
+  font: inherit; color: inherit; background: white; border: 1px solid #809598;
+  border-radius: .42rem; padding: .4rem .6rem; min-height: 2.45rem;
+}
+button { cursor: pointer; }
+.open { color: #fff; background: #22545f; border-color: #22545f; }
+button:hover { box-shadow: inset 0 0 0 1px currentColor; }
+:focus-visible { outline: 2px solid #005de0; outline-offset: 2px; }
+button:disabled { cursor: default; opacity: .55; }
+.row {
+  background: white; border: 1px solid #d4dfe0; border-radius: .55rem;
+  padding: .8rem .9rem; margin: .45rem 0; display: grid;
+  grid-template-columns: minmax(0, 1fr) auto; gap: .45rem 1rem; align-items: start;
+}
+.row[data-state="success"] { border-left: .3rem solid #267549; }
+.row[data-state="invalid"] { border-left: .3rem solid #85747a; }
+.row[data-state="skipped"] { border-left: .3rem solid #aa6d19; }
+.url { overflow-wrap: anywhere; font: .85rem/1.4 ui-monospace, Consolas, monospace; margin: .35rem 0; }
+.reason { color: #495760; font-size: .86rem; }
+.actions { grid-column: 1 / -1; gap: .45rem; }
+.actions button { font-size: .85rem; }
+.state-label { display: flex; gap: .4rem; align-items: center; font-size: .9rem; }
+.message { min-height: 1.6rem; margin: .35rem 0; color: #215462; }
+.warning { color: #9b301c; }
+.copy-fallback { width: min(28rem, 100%); }
+@media (max-width: 36rem) {
+  .row { grid-template-columns: 1fr; }
+  .actions { grid-column: 1; }
+  .state-label { margin-top: .15rem; }
+}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>OCL Web 图片人工恢复</h1>
+    <p class="muted">下载后把文件放在 Downloads，并保留目标文件名。页面只在你点击时打开外部链接。</p>
+  </header>
+  <section class="stats" aria-label="检查进度">
+    <div class="stat">剩余待恢复<strong id="remaining">—</strong></div>
+    <div class="stat">已下载<strong id="success">—</strong></div>
+    <div class="stat">确认失效<strong id="invalid">—</strong></div>
+    <div class="stat">暂时跳过<strong id="skipped">—</strong></div>
+  </section>
+  <p class="muted" id="progressNote">暂时跳过仍计入剩余，已下载和确认失效从剩余中扣除。</p>
+  <p class="warning" id="storageNotice" role="status" hidden></p>
+  <section class="filters" aria-label="筛选">
+    <label class="search" for="search">搜索文件名、网址或原因
+      <input type="search" id="search" autocomplete="off">
+    </label>
+    <label for="statusFilter">处理状态
+      <select id="statusFilter"><option value="all">全部</option></select>
+    </label>
+    <label for="reasonFilter">主要阻碍
+      <select id="reasonFilter"><option value="all">全部</option></select>
+    </label>
+  </section>
+  <p class="muted" id="visibleCount" aria-live="polite"></p>
+  <p class="message" id="message" role="status"></p>
+  <label id="manualCopy" hidden>手动复制
+    <input id="copyField" class="copy-fallback" type="text" readonly>
+  </label>
+  <div id="records" aria-label="缺失文件"></div>
+  <noscript>启用 JavaScript 后可查看清单并保存本地进度。</noscript>
+</main>
+<script id="recovery-data" type="application/json">[{"path":"from_web/test_0012.jpg","url":"http://photocdn.sohu.com/20131015/Img388195478.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0021.jpg","url":"http://photocdn.sohu.com/20110807/Img315682549.jpg","group":"访问受限","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0031.jpg","url":"http://photocdn.sohu.com/20110807/Img315682550.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0034.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20180417/3542f44c86a8450f82a2b7f49c6abd99.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0038.jpg","url":"http://photocdn.sohu.com/20110902/Img318113675.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0040.jpg","url":"http://photocdn.sohu.com/20140406/Img397828991.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0052.jpg","url":"http://photocdn.sohu.com/20140106/Img393016000.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0056.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/q_70,c_zoom,w_640/images/20171008/0cedd335661a44d4a2429d059576535d.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0093.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20180626/42c4b13692d94cfe8d96011fb0baeace.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0176.jpg","url":"http://img.mp.itc.cn/upload/20170712/d3dafc3ce76c49829a124149a64b2595_th.jpg","group":"访问受限","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 403","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0185.jpg","url":"http://photocdn.sohu.com/20070407/Img249263809.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0188.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20180227/caafcf0d67a0413d9238bbd0bd0bfc71.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0189.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20200503/96b2cd5700374df39f684ba253496cff.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0194.jpg","url":"http://photocdn.sohu.com/20121121/Img358235898.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0204.jpg","url":"http://photocdn.sohu.com/20120116/Img332335919.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0205.jpg","url":"http://photocdn.sohu.com/20120116/Img332262454.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0210.jpg","url":"http://photocdn.sohu.com/20131230/Img392615710.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0276.png","url":"http://hbimg.b0.upaiyun.com/daf7f72d6a982baa2c1e3a6a01e34b39d52468a7de21-3sI1U6_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0289.png","url":"http://hbimg.b0.upaiyun.com/aeb0b91ac709bae82e82c4f71897c9cd455be40f2c7d9-WeVRWI_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0295.png","url":"http://hbimg.b0.upaiyun.com/b6e9bbb115dfbdf2cdb00233e8c40d5736ffa7924232-4t6xMb_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","发布方备用地址受限","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0304.jpg","url":"http://en.pimg.jp/025/639/868/1/25639868.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0310.jpg","url":"http://img2.everychina.com/img/29/7b/a4f5555285fb9251898e84588381-600x600c0-54ac/selling_dog_cage.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0320.jpg","url":"http://img.frbiz.com/nimg/59/b9/21e78a58882863cac33d56c2af88-300x300-1/selling_dog_cage_pet_cage.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0326.png","url":"http://hbimg.b0.upaiyun.com/46495dcad1f561491be4a24b634a113a6d0ff5f39e11-JMkHyU_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","发布方备用地址受限","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0349.jpg","url":"http://thestyletraveller.com/wp-content/uploads/2018/12/PC053216-e1545591470562-768x1024.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0373.jpg","url":"http://img.mp.itc.cn/upload/20170302/3685ca5333404ac2b3abf2e04d4bf9e7_th.jpg","group":"访问受限","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 403","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0378.png","url":"http://hbimg.b0.upaiyun.com/54efbaccfb8a5ed22020110e50c4daf3fb9a5719933e-OehMiw_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","发布方备用地址受限","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0396.jpg","url":"http://photocdn.sohu.com/20110408/Img305508520.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0406.png","url":"http://hbimg.b0.upaiyun.com/9d88e9955442fc2ea38101f639525fa56e014e495146-4zDZbG_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0414.jpg","url":"http://img3m6.ddimg.cn/76/33/1074956926-1_w_1.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 567","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0428.jpg","url":"http://img2.everychina.com/img/49/5c/65e8bf6138868675ea95ad17f4f2-250x250c1-a13f/feed_fence_panel_and_gate_provide_horse_eating_place.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0445.png","url":"http://hbimg.b0.upaiyun.com/c903d853158e3c2264f9df24764b3a401011dc7877334-XNrHAB_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0460.jpeg","url":"http://dingyue.nosdn.127.net/975Y1ZcDIsjGr8LPJXqDKrHhEbyOLKhMcheYqX1o7tOg01534943526470compressflag.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0463.jpg","url":"http://photocdn.sohu.com/20111009/Img321531536.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0470.png","url":"http://hbimg.b0.upaiyun.com/4fcb485e6847bc9d99924be9054ed3096fefe9e37a558-Cm5CNJ_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0478.png","url":"http://hbimg.b0.upaiyun.com/3cf152f4fc5a508d120ef7aa58c84b2f324a9ca316c41-jTR5Em_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0490.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20171014/f51104d3894f429fbaac689e13bb52f8.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0493.jpg","url":"http://photocdn.sohu.com/20091010/Img267242238.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0503.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20200323/64686e6208f345bdb4db8b97b19a0db9.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0504.jpg","url":"http://img.zcool.cn/community/017013556862e90000012716ebbb34.jpg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0510.jpeg","url":"http://5b0988e595225.cdn.sohucs.com/images/20180913/cf6d10cc75134dc9b002fcd297f01090.jpeg","group":"访问受限","reasons":["原始 URL 遇到 HTTP 403","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0567.png","url":"http://hbimg.b0.upaiyun.com/e115d9354c44a23f05b7268576e6881f227202bc5f0cd-RS0Xgn_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","发布方备用地址受限","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0757.png","url":"http://hbimg.b0.upaiyun.com/f6a9d5f7c0f3e37863b792eab015a3ffc87310159061-peyS63_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","发布方备用地址受限","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0764.png","url":"http://hbimg.b0.upaiyun.com/efda2546f0abc82fb8dca87e5e8fee7f5d8aaec29f7a-Dh1EVQ_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0790.jpg","url":"http://img.mp.itc.cn/upload/20161113/098f62c088ab4013a17d4e9b397a2c1f_th.JPG","group":"访问受限","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 403","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0800.png","url":"http://hbimg.b0.upaiyun.com/d5c9a02ef50d5a4f995b5100ed439af17de3718f39435-DeFntg_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0837.png","url":"http://hbimg.b0.upaiyun.com/d45afedd4be939aa91a1aef6858d901982aac1411a2b5-EFgdZm_fw658","group":"访问受限","reasons":["原始 URL 遇到 HTTP 405","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0004.jpg","url":"http://file.youboy.com/a/78/95/25/9/8688209s.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0014.jpg","url":"http://www.cn357.com/upload/article/images/3%28139%29.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0028.jpg","url":"http://dpic.tiankong.com/x3/hr/QJ8704927006.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0042.jpg","url":"http://images.freeimages.com/images/large-previews/556/mackinac-island-carriage-horses-1366010.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0094.jpg","url":"http://img.99114.com/group1/M00/84/89/wKgGTFisBJWAauU3AABNEcGoqbY238.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 502","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0111.jpg","url":"http://dpic.tiankong.com/rd/ev/QJ7107045589.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0171.jpg","url":"http://dpic.tiankong.com/06/ig/QJ6938404976.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0178.jpeg","url":"http://c-ssl.duitang.com/uploads/item/201601/31/20160131102645_A8SXN.jpeg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0208.jpg","url":"http://www.ship.sh/attachment/images/201508/201508131359515309.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0209.jpg","url":"http://www.sol.com.cn/xinxiupdown_winland/winlandzixun_gl/wenben/uploadfile/2010461019425.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、代理连接错误、请求超时","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0235.jpg","url":"http://www.ecerimg.com/nimg/84/56/6389f24e922af0051c94c33cc855.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0245.jpg","url":"http://images.freeimages.com/images/premium/previews/2680/26808215-damaged-off-road-car.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0262.jpg","url":"http://img.99114.com/group1/M00/91/1A/wKgGTFlvFI-ABCywAAHfKlPF3q4032.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0272.jpg","url":"http://images.freeimages.com/images/premium/previews/4907/49076516-cocktails-with-banana-and-chocolate-on-table-on-light-background.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0281.jpg","url":"http://images.freeimages.com/images/premium/previews/4586/45866306-woman-with-dog-lying-on-the-grass.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0291.jpg","url":"http://images.freeimages.com/images/premium/previews/5098/50986244-dog-lying-on-grass.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0293.jpg","url":"http://i.serengeseba.com/uploads/i_1_3853571602x3763637413_26.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、响应内容不是图片、TLS 握手失败","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0294.jpg","url":"http://images.freeimages.com/images/premium/previews/4381/43813648-dog-lying-on-the-floor.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0300.jpg","url":"http://st2.cdn.yestone.com/thumbs/1177973/image/10508/105083036/api_thumb_450.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0311.jpg","url":"http://images.freeimages.com/images/premium/previews/1108/11086380-neglected-dog-in-a-cage.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0315.jpg","url":"http://images.freeimages.com/images/premium/previews/4367/43678588-dog-in-cage.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0321.png","url":"http://i2.wp.com/www.thebrokedog.com/wp-content/uploads/2015/06/Screen-Shot-2015-06-03-at-9.43.18-AM.png?resize=607%2C605","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0350.jpg","url":"http://img-aws.ehowcdn.com/877x500p/photos.demandstudios.com/150/139/fotolia_1516518_XS.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 HTTP 530","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0358.jpg","url":"http://i.serengeseba.com/uploads/i_2_3261257152x1889051474_15.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、响应内容不是图片","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0363.jpg","url":"http://dpic.tiankong.com/nt/pu/QJ8731676399.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 请求超时、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0365.jpg","url":"http://dpic.tiankong.com/5w/s7/QJ8308261784.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0367.jpg","url":"http://dpic.tiankong.com/fs/3b/QJ8747950084.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0368.jpg","url":"http://dpic.tiankong.com/3t/h0/QJ8235001576.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0369.jpg","url":"http://dpic.tiankong.com/f8/67/QJ8433044516.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0371.jpg","url":"http://dpic.tiankong.com/rc/xn/QJ8506570997.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0380.jpg","url":"http://images.freeimages.com/images/premium/previews/5069/50696584-horse-in-meadow-summer-day.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0383.jpg","url":"http://dpic.tiankong.com/8i/e1/QJ9112611137.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0388.jpg","url":"http://images.freeimages.com/images/premium/previews/1019/10196392-young-woman-walking-her-horse-oslo-norway.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0403.jpg","url":"http://dpic.tiankong.com/cc/sk/QJ8514994407.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0405.jpg","url":"http://images.freeimages.com/images/premium/previews/5726/57268488-brown-horse-standing-in-pasture.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0424.jpg","url":"http://images.freeimages.com/images/premium/previews/1280/12802185-brown-horse-eating.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0453.jpg","url":"http://dpic.tiankong.com/ck/i2/QJ8912742951.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0468.jpg","url":"http://images.freeimages.com/images/large-previews/7a8/zebra-1379744.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0469.jpg","url":"http://dpic.tiankong.com/m6/bs/QJ8578422891.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0482.jpg","url":"http://dpic.tiankong.com/ge/l9/QJ6454659935.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0484.jpg","url":"http://dpic.tiankong.com/dr/wt/QJ8521511590.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0491.jpg","url":"http://images.freeimages.com/images/premium/previews/1834/18346754-single-zebra-african-equids-running.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0497.jpg","url":"http://images.freeimages.com/images/premium/previews/1020/10207945-young-zebra-eating-grass.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0501.jpg","url":"http://img.sj33.cn/uploads/allimg/201202/20120229224404247.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0505.jpg","url":"http://img-aws.ehowcdn.com/877x500p/photos.demandstudios.com/getty/article/232/37/185896266.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 HTTP 530","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0506.jpeg","url":"http://b-ssl.duitang.com/uploads/blog/201510/11/20151011165918_QxUeh.thumb.700_0.jpeg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0507.jpg","url":"http://dpic.tiankong.com/zr/p1/QJ8553713325.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0509.jpg","url":"http://dpic.tiankong.com/d8/ge/QJ8757541926.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0753.jpg","url":"http://up.deskcity.org/pic_source/b2/8a/df/b28adff45f90b1cec10f796328f9b9ee.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502、代理连接错误","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0766.jpg","url":"http://www.ybxww.com/content/2012-10/8/xinhua_sc_yibin20121081011208807032.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、请求超时","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0769.jpg","url":"http://www.ipincai.com/focus/upload/photo/2/1d9e5e860724a09bd58397aa9077f337.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 493","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0781.jpeg","url":"http://files.licai.com/wechart_spider/1535385376.3819482.jpeg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 HTTP 404、TLS 握手失败","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0785.jpg","url":"http://img3.redocn.com/20120517/Redocn_2012051515453738.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、请求超时","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0788.jpg","url":"http://aff.bstatic.com/images/hotel/840x460/105/105161809.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 HTTP 404、TLS 握手失败","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0799.jpg","url":"http://www.shorts-trip.com/wp-content/uploads/2018/02/pelni.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 响应内容不是图片、TLS 握手失败","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0819.jpg","url":"http://images.freeimages.com/images/premium/previews/1354/13548412-sailing-boat-prow.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_1100.jpg","url":"http://images.freeimages.com/images/premium/previews/4532/4532998-three-sheep-eating.jpg","group":"连接失败或网关错误","reasons":["原始 URL 遇到 TLS 握手失败、HTTP 502","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0017.jpeg","url":"http://b-ssl.duitang.com/uploads/item/201208/22/20120822141404_ssaGK.thumb.700_0.jpeg","group":"原站返回 404 / 410","reasons":["原始 URL 遇到 HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0199.jpg","url":"http://cn.wahooart.com/Art.nsf/O/AQRJK4/%24File/Willem-Van-De-Velde-Ii-A-Calm-Sea-with-Two-Fishing-Boats-and-a-Third-Beached.jpg","group":"原站返回 404 / 410","reasons":["原始 URL 遇到 HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0399.jpg","url":"http://fh-sites.imgix.net/sites/1644/2018/08/09170241/o.jpg?auto=compress,format\u0026fit=crop\u0026crop=faces\u0026w=720\u0026h=480","group":"原站返回 404 / 410","reasons":["原始 URL 遇到 HTTP 410","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0416.jpg","url":"http://www.chinadaily.com.cn/english/doc/2004-08/18/xin_080801181518601231606.jpg","group":"原站返回 404 / 410","reasons":["原始 URL 遇到 HTTP 404","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]},{"path":"from_web/test_0771.jpg","url":"http://pix6.agoda.net/agaff/aff.bstatic.com/images/hotel/840x460/172/172352147.jpg","group":"原站返回 404 / 410","reasons":["原始 URL 遇到 HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0808.jpg","url":"http://r.bstatic.com/images/hotel/max1024x768/232/23218695.jpg","group":"原站返回 404 / 410","reasons":["原始 URL 遇到 HTTP 404","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0286.png","url":"http://i2.wp.com/braincharm.com/wp-content/uploads/2018/06/afadfafafaffafafafafaf.png?fit=751%2C422\u0026ssl=1","group":"其他未恢复","reasons":["原始 URL 遇到 HTTP 400","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0324.jpeg","url":"http://i0.wp.com/fillingthesails.com/wp-content/uploads/2014/09/wpid-20140910_1436312.jpg.jpeg?resize=600,338","group":"其他未恢复","reasons":["原始 URL 遇到 HTTP 400","Wayback 已查窗口无精确图片"]},{"path":"from_web/test_0410.jpg","url":"http://www.aupaysdesloups.com/photogallery/upload/2016/09/28/20160928093714-53a3b34e.jpg","group":"其他未恢复","reasons":["原始 URL 遇到 HTTP 465","Wayback 已查窗口无精确图片","Common Crawl 部分索引查询未完成"]}]</script>
+<script>
+"use strict";
+const records = JSON.parse(document.getElementById("recovery-data").textContent);
+const storageKey = "ocl.web-recovery.status.v1";
+const statusLabels = {
+  pending: "待检查", success: "下载成功", invalid: "确认失效", skipped: "暂时跳过"
+};
+const groups = ["访问受限", "连接失败或网关错误", "原站返回 404 / 410", "其他未恢复"];
+const statuses = new Set(Object.keys(statusLabels));
+const refs = new Set(records.map(record => record.path));
+const byId = id => document.getElementById(id);
+let progress = Object.create(null);
+
+function storageWarning() {
+  const notice = byId("storageNotice");
+  notice.hidden = false;
+  notice.textContent = "当前浏览器未允许此本地文件保存进度。标记只在本次打开期间有效。";
+}
+
+function readProgress(value) {
+  const clean = Object.create(null);
+  try {
+    const saved = JSON.parse(value || "{}");
+    for (const [path, state] of Object.entries(saved || {})) {
+      if (refs.has(path) && statuses.has(state) && state !== "pending") clean[path] = state;
+    }
+  } catch {
+    const notice = byId("storageNotice");
+    notice.hidden = false;
+    notice.textContent = "已保存的进度无法读取。本页从待检查状态开始。";
+  }
+  return clean;
+}
+
+try {
+  progress = readProgress(localStorage.getItem(storageKey));
+} catch {
+  storageWarning();
+}
+
+function setProgress(path, state) {
+  if (state === "pending") delete progress[path];
+  else progress[path] = state;
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(progress));
+  } catch {
+    storageWarning();
+  }
+  updateStats();
+  if (byId("statusFilter").value !== "all") render();
+}
+
+function updateStats() {
+  const counts = {success: 0, invalid: 0, skipped: 0};
+  for (const state of Object.values(progress)) counts[state]++;
+  for (const name of Object.keys(counts)) byId(name).textContent = counts[name];
+  byId("remaining").textContent = records.length - counts.success - counts.invalid;
+}
+
+function createElement(tag, className, text) {
+  const element = document.createElement(tag);
+  if (className) element.className = className;
+  if (text !== undefined) element.textContent = text;
+  return element;
+}
+
+function appendOption(select, value, text) {
+  const option = createElement("option", null, text);
+  option.value = value;
+  select.append(option);
+}
+
+function validUrl(value) {
+  try {
+    const url = new URL(value);
+    if (!["http:", "https:"].includes(url.protocol) || url.username || url.password) return null;
+    url.hash = "";
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+function openInTab(url) {
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function waybackUrl(original) {
+  return original && "https://web.archive.org/web/*/" + original;
+}
+
+async function copyFilename(name) {
+  const field = byId("copyField");
+  const fallback = byId("manualCopy");
+  let copied = false;
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(name);
+      copied = true;
+    }
+  } catch {}
+  if (!copied) {
+    const priorFocus = document.activeElement;
+    fallback.hidden = false;
+    field.value = name;
+    field.focus();
+    field.select();
+    try { copied = document.execCommand("copy"); } catch {}
+    if (copied) priorFocus?.focus();
+  }
+  fallback.hidden = copied;
+  byId("message").textContent = copied ? "已复制 " + name : "请按 Ctrl+C 复制已选中的文件名。";
+}
+
+function createCard(record) {
+  const card = createElement("article", "row");
+  card.dataset.state = progress[record.path] || "pending";
+  const filename = record.path.split("/").pop();
+  const content = createElement("div");
+  content.append(
+    createElement("h3", null, filename),
+    createElement("p", "url", record.url),
+    createElement("p", "reason", record.reasons.join("；"))
+  );
+  const status = createElement("label", "state-label", "当前状态");
+  const select = createElement("select");
+  select.setAttribute("aria-label", filename + " 的处理状态");
+  for (const [value, label] of Object.entries(statusLabels)) appendOption(select, value, label);
+  select.value = card.dataset.state;
+  select.addEventListener("change", () => {
+    card.dataset.state = select.value;
+    setProgress(record.path, select.value);
+    byId("message").textContent = filename + " · " + statusLabels[select.value];
+  });
+  status.append(select);
+  const actions = createElement("div", "actions");
+  const url = validUrl(record.url);
+  for (const [label, action, disabled] of [
+    ["打开原始 URL", () => openInTab(url), !url],
+    ["打开 Wayback Machine", () => openInTab(waybackUrl(url)), !url],
+    ["复制文件名", () => copyFilename(filename), false]
+  ]) {
+    const button = createElement("button", label === "打开原始 URL" ? "open" : null, label);
+    button.type = "button";
+    button.disabled = disabled;
+    button.addEventListener("click", action);
+    actions.append(button);
+  }
+  card.append(content, status, actions);
+  return card;
+}
+
+function render() {
+  const query = byId("search").value.trim().toLowerCase();
+  const status = byId("statusFilter").value;
+  const reason = byId("reasonFilter").value;
+  const fragment = document.createDocumentFragment();
+  let count = 0;
+  for (const group of groups) {
+    if (reason !== "all" && group !== reason) continue;
+    const matches = records.filter(record =>
+      record.group === group &&
+      (status === "all" || (progress[record.path] || "pending") === status) &&
+      (!query || [record.path, record.url, ...record.reasons].join(" ").toLowerCase().includes(query))
+    );
+    if (!matches.length) continue;
+    const section = createElement("section");
+    section.append(createElement("h2", null, group + "（" + matches.length + "）"));
+    for (const record of matches) section.append(createCard(record));
+    count += matches.length;
+    fragment.append(section);
+  }
+  if (!count) fragment.append(createElement("p", "muted", "没有符合当前筛选条件的文件。"));
+  byId("records").replaceChildren(fragment);
+  byId("visibleCount").textContent = "显示 " + count + " / " + records.length + " 张";
+}
+
+for (const [value, label] of Object.entries(statusLabels)) appendOption(byId("statusFilter"), value, label);
+for (const group of groups) appendOption(byId("reasonFilter"), group, group);
+byId("search").addEventListener("input", render);
+byId("statusFilter").addEventListener("change", render);
+byId("reasonFilter").addEventListener("change", render);
+window.addEventListener("storage", event => {
+  if (event.key !== storageKey && event.key !== null) return;
+  progress = readProgress(event.newValue);
+  updateStats();
+  render();
+});
+updateStats();
+render();
+</script>
+</body>
+</html>

@@ -1,13 +1,43 @@
 
 __pycache__/
 *.pyc
+.ipynb_checkpoints/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.cache/
 .venv/
-.env
+venv/
+.conda/
+/env/
 
-data/
+.env
+.env.*
+!.env.example
+.envrc
+.netrc
+.git-credentials
+.hf/
+.huggingface/
+.aws/
+.kaggle/
+kaggle.json
+credentials.json
+token
+*.pem
+*.key
+*.p12
+
+/data/
+/weights/
+/checkpoints/
 *.pt
 *.pth
 *.ckpt
+*.safetensors
+*.onnx
+*.bin
+*.pkl
 
 .vscode/
 .idea/
