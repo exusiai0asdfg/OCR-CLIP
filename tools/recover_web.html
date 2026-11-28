@@ -265,7 +265,7 @@ function render() {
     );
     if (!matches.length) continue;
     const section = createElement("section");
-    section.append(createElement("h2", null, group + "（" + matches.length + "）"));
+    section.append(createElement("h2", null, group + "(" + matches.length + ")"));
     for (const record of matches) section.append(createCard(record));
     count += matches.length;
     fragment.append(section);

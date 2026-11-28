@@ -1,42 +1,25 @@
-import pickle
+"""Show example labels from the official OCL resources."""
+
+import argparse
 import json
 from pathlib import Path
 
-root = (
-    Path(__file__).resolve().parents[2]
-    / "ObjectConceptLearning"
-    / "data"
-    / "resources"
-)
-
-# for path in root.iterdir():
-#     print(path.name)
-    
-    
-with open(root / "OCL_annot_test.pkl", "rb") as f:
-    test_data = pickle.load(f)
-
-# print(type(test_data))
-# print(len(test_data))
-# print(test_data[0])
-
-with open(root / "OCL_class_object.json", "r", encoding="utf-8") as f:
-    categories = json.load(f)
-
-# print(type(categories))
-# print(len(categories))
-# print(categories[0])
-
-with open(root / "OCL_class_attribute.json", "r", encoding="utf-8") as f:
-    attribute = json.load(f)
-    
-with open(root / "OCL_class_affordance.json", "r", encoding="utf-8") as f:
-    affordance = json.load(f)
-    
-# print(type(attribute))
-# print(type(affordance))
-
-print(attribute[0])
-print(affordance[0])
+from audit_dataset import AnnotationReader
 
 
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-root", type=Path, default=Path(__file__).resolve().parents[1] / "data")
+    parser.add_argument("--resources", type=Path)
+    args = parser.parse_args()
+    resources = args.resources or args.data_root / "resources"
+    with (resources / "OCL_annot_test.pkl").open("rb") as stream:
+        annotations = AnnotationReader(stream).load()
+    print(f"Test images: {len(annotations)}")
+    for name in ("object", "attribute", "affordance"):
+        labels = json.loads((resources / f"OCL_class_{name}.json").read_text(encoding="utf-8-sig"))
+        print(f"{name} ({len(labels)}): {labels[0]}")
+
+
+if __name__ == "__main__":
+    main()

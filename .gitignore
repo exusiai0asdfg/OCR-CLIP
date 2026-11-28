@@ -6,6 +6,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .cache/
+.features-*.tmp
 .venv/
 venv/
 .conda/
@@ -27,6 +28,10 @@ token
 *.pem
 *.key
 *.p12
+*.ppk
+.ssh/
+id_rsa
+id_ed25519
 
 /data/
 /weights/
@@ -38,6 +43,13 @@ token
 *.onnx
 *.bin
 *.pkl
+*.zip
+*.tgz
+*.tar
+*.tar.gz
+*.parquet
+*.npy
+*.npz
 
 .vscode/
 .idea/

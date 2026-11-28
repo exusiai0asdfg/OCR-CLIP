@@ -5,7 +5,6 @@ from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from hashlib import sha256
 import gzip
-import importlib.util
 import io
 import json
 from pathlib import Path
@@ -395,6 +394,8 @@ def classify(report, missing, events):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--data-root",type=Path,default=web.ROOT/"data")
+    parser.add_argument("--resources",type=Path)
     parser.add_argument("--seconds",type=int,default=900)
     parser.add_argument("--post-release-limit",type=int,default=0)
     parser.add_argument("--extend",action="store_true")
@@ -406,16 +407,18 @@ def main():
     parser.add_argument("--wayback-interval",type=float,default=.8)
     parser.add_argument("--crawl",action="append",choices=tuple(CC_CRAWLS))
     args=parser.parse_args()
-    data=web.ROOT/"data"
+    if __package__:
+        from . import audit_web_boxes as audit
+    else:
+        import audit_web_boxes as audit
+    data=args.data_root
+    resources=args.resources or data/"resources"
     root=data/"web_recovery"
     run=Run(args.seconds,root,args.wayback_interval)
     report_path=data/"web_download_report.json"
     report=web.read_json(report_path)
-    targets,mapping=web.load_inputs(data/"image_manifest.json",web.RESOURCE/"url_to_filename.json")
-    spec=importlib.util.spec_from_file_location("web_bbox_recovery_audit",data/"web_bbox_audit/audit.py")
-    audit=importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(audit)
-    annotations,_=audit.get_annotations(targets)
+    targets,mapping=web.load_inputs(data/"image_manifest.json",resources/"url_to_filename.json")
+    annotations,_=audit.get_annotations(targets,resources)
     pending=report["missing"][:]
     urls={name:mapping[name][0] for name in pending}
     digests=defaultdict(set)
@@ -527,16 +530,18 @@ def main():
     report["available_image_bytes"]=sum(row["bytes"] for row in report["files"].values() if row["status"]=="available")
     report["status"]="final_recovery_complete"
     report["last_pass_report"]="web_recovery/last_pass.json"
-    missing=audit.write_missing(report,annotations,mapping)
+    missing=audit.write_missing(report,annotations,mapping,data)
     report["missing_instances"]=missing["objects"]
     report["missing_instances_by_category"]=missing["categories"]
     report["missing_images_by_reason"]=missing["counts_by_reason"]
-    summary=web.read_json(data/"web_bbox_audit/summary.json")
-    summary["missing"]=missing
+    summary_path=data/"web_bbox_audit/summary.json"
     if outcome["added"]:
         # The no-plot audit rebuilds all coordinate counts from verified metadata.
         report["bbox_report_refresh_needed"]=True
-    web.write_json(data/"web_bbox_audit/summary.json",summary)
+    if summary_path.is_file():
+        summary=web.read_json(summary_path)
+        summary["missing"]=missing
+        web.write_json(summary_path,summary)
     web.write_json(report_path,report)
     print(json.dumps({k:outcome[k] for k in ("added","remaining","reason_counts_nonexclusive","index_searches")},ensure_ascii=False))
 

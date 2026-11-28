@@ -72,18 +72,18 @@ Set up your own Python environment by downloading and installing **Miniforge / u
 
 ## 参考资料
 
-1. OCL 论文：**Beyond Object Recognition: A New Benchmark towards Object Concept Learning**（超越物体识别：面向物体概念学习的新基准）
+1. OCL 论文：**Beyond Object Recognition: A New Benchmark towards Object Concept Learning**(超越物体识别：面向物体概念学习的新基准)
 
 2. **OCL 数据集准备**
    * 官方数据准备脚本位于 OCL 的 GitHub 仓库中：
      [https://github.com/silicx/ObjectConceptLearning/tree/main/data](https://github.com/silicx/ObjectConceptLearning/tree/main/data)
    * 在实现 DataLoader 之前，请先阅读并理解仓库中提供的脚本和数据集结构。
    * 具体来说，该仓库提供了 `prepare_data.sh`、`download_web_images.py` 以及 `resources` 目录用于数据集准备。
-   * 下载数据集后，请仔细检查图像数据和标注文件，并理解**类别（category）**、**属性（attribute）**和**可供性（affordance）**标注是如何表示的。
+   * 下载数据集后，请仔细检查图像数据和标注文件，并理解**类别(category)**、**属性(attribute)**和**可供性(affordance)**标注是如何表示的。
 
 3. 使用官方 OCL GitHub 仓库中提供的脚本下载并准备所需的测试数据。
 
-4. CLIP 论文/代码仓库：**Contrastive Language-Image Pre-Training**（对比语言-图像预训练）
+4. CLIP 论文/代码仓库：**Contrastive Language-Image Pre-Training**(对比语言-图像预训练)
    [https://github.com/openai/CLIP](https://github.com/openai/CLIP)
 
 ## 步骤 1：准备 DataLoader
@@ -92,7 +92,7 @@ Set up your own Python environment by downloading and installing **Miniforge / u
 
    * 加载数据集及对应的标注；
    * 按样本数量对类别标签进行排序以筛选数据，仅保留**样本数量最多的前 10 个类别**；
-   * 执行图像预处理和文本分词（tokenization）。
+   * 执行图像预处理和文本分词(tokenization)。
 
 2. 使用 PyTorch 原生的 `DataLoader` 创建测试数据加载器：
 
@@ -117,9 +117,9 @@ Set up your own Python environment by downloading and installing **Miniforge / u
 3. 遍历测试集并执行推理：
 
    * 每张图像可能包含多个物体。
-   * 计算每个物体与候选**类别（category）**标签之间的余弦相似度。
+   * 计算每个物体与候选**类别(category)**标签之间的余弦相似度。
    * 使用余弦相似度分数进行排序。
    * 计算模型的 **Top-k 准确率**。
-   * 按批次（batch）逐批执行前向推理，并报告在整个测试集上的平均准确率。
+   * 按批次(batch)逐批执行前向推理，并报告在整个测试集上的平均准确率。
 
-4. 使用 **mAP（mean Average Precision，平均精度均值）** 指标评估模型对**属性（attribute）**和**可供性（affordance）**标签的预测性能。
+4. 使用 **mAP(mean Average Precision，平均精度均值)** 指标评估模型对**属性(attribute)**和**可供性(affordance)**标签的预测性能。

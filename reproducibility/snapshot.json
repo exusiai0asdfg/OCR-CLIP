@@ -1,0 +1,28 @@
+{
+  "schema": 1,
+  "inputs": {
+    "manifest_sha256": "0c14e53b4883a5e3f1d08f5bbe94eb68168d9a40457a291fd2b229791abcb712",
+    "resource_sha256": {
+      "OCL_annot_test.pkl": "cd394d3a48cf7f4a5ca9259e895ee0e7fa57b50c5e4cce5c4929f8cdc647cd1d",
+      "OCL_class_object.json": "38c5e53ced9ecb5cc050452c5abd435b3db7051a744fdf89cb0efbf17f1fca4e",
+      "OCL_class_attribute.json": "fb2d87756d21f1b53116051c98da6371de7c6d07e872fcd6b5beb5d490b53664",
+      "OCL_class_affordance.json": "7f6fc31b35121aca3f0f19697393979b88cd9d5ed15c05fece338efe677fee41"
+    }
+  },
+  "categories": [
+    "car",
+    "broccoli",
+    "boat",
+    "horse",
+    "dog",
+    "banana",
+    "truck",
+    "motorcycle",
+    "zebra",
+    "sheep"
+  ],
+  "instances_sha256": "77c9a2757229cca239e2926e2a723fadb6331229aac20bc4d50774807e918129",
+  "images": 4065,
+  "instances": 11231,
+  "imagenet_report_revision": "49e2ee26f3810fb5a7536bbf732a7b07389a47b5"
+}

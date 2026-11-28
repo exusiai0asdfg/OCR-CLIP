@@ -367,15 +367,17 @@ def local_images(root, split, pending):
             yield name, None, f"Cannot read local {split} file: {error.strerror}"
 
 
-def hub_shards(transfer, token):
+def hub_shards(transfer, token, requested_revision=None):
     with hub_session(token) as session:
         payload = transfer.get(
-            session, f"{HUB}/api/datasets/{REPOSITORY}/revision/main?blobs=true", REPOSITORY,
+            session, f"{HUB}/api/datasets/{REPOSITORY}/revision/{requested_revision or 'main'}?blobs=true", REPOSITORY,
         )
     info = json.loads(payload)
     revision = info.get("sha", "")
     if not re.fullmatch("[0-9a-f]{40}", revision):
         raise DownloadError("Missing or invalid Hugging Face dataset revision.")
+    if requested_revision is not None and revision != requested_revision:
+        raise DownloadError(f"Hugging Face resolved {revision}, expected {requested_revision}.")
     files = info["siblings"]
     shards = {}
     for split, prefix in SPLITS.items():
@@ -397,9 +399,9 @@ def save_image(root, relative, body):
     return {"status": "downloaded", **info}
 
 
-def run_hub(root, split_paths, pending, transfer, workers, update, record):
+def run_hub(root, split_paths, pending, transfer, workers, update, record, requested_revision=None):
     token = hub_token()
-    revision, shards = hub_shards(transfer, token)
+    revision, shards = hub_shards(transfer, token, requested_revision)
     update(revision=revision)
     # Check data access before starting a scan of hundreds of shards.
     first_split = next(split for split in pending if pending[split])
@@ -432,7 +434,7 @@ def run_hub(root, split_paths, pending, transfer, workers, update, record):
                 for shard, job in zip(batch, jobs):
                     found, failures, error = job.result()
                     for name, (body, provenance) in found.items():
-                        if name in remaining and record(remaining[name], body, provenance):
+                        if name in remaining and record(remaining[name], body, {**provenance, "source_revision": revision}):
                             remaining.pop(name)
                     for name, reason in failures.items():
                         if name in remaining:
@@ -487,21 +489,33 @@ def positive_int(value):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=PROJECT_ROOT / "data" / "image_manifest.json")
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--data-root", type=Path, help="Output directory (default: manifest directory).")
     parser.add_argument("--source-root", type=Path, help="Local original source directory containing train/ and val/.")
+    parser.add_argument("--revision", help="Pin the Hugging Face dataset to a 40-character commit SHA")
     parser.add_argument("--report", type=Path, help="Override the JSON report path.")
     parser.add_argument("--sample-per-split", type=positive_int, metavar="N", help="Select the first N names per split.")
     parser.add_argument("--check-only", action="store_true", help="Validate local files without network access.")
     parser.add_argument("--max-download-mib", type=positive_int, default=512, help="Response body budget (default: 512 MiB).")
     parser.add_argument("--workers", type=positive_int, default=6, help="Parallel shard readers (default: 6).")
     args = parser.parse_args()
-    root = (args.data_root or args.manifest.parent).resolve()
-    report_path = args.report or root / ("imagenet_sample_report.json" if args.sample_per_split else "imagenet_download_report.json")
+    root = (args.data_root or (args.manifest.parent if args.manifest else PROJECT_ROOT / "data")).resolve()
+    manifest = args.manifest or root / "image_manifest.json"
+    if args.revision is not None:
+        args.revision = args.revision.lower()
+        if not re.fullmatch(r"[0-9a-f]{40}", args.revision) or args.source_root is not None:
+            parser.error("--revision must be a full Hugging Face commit SHA and cannot be used with --source-root")
+    prior_path = root / "imagenet_download_report.json"
+    report_path = args.report or (
+        root / "imagenet_check_report.json" if args.check_only
+        else root / "imagenet_sample_report.json" if args.sample_per_split
+        else prior_path
+    )
     if args.source_root is not None and not args.source_root.is_dir():
         parser.error("--source-root must be an existing ImageNet directory.")
     try:
-        split_paths = manifest_paths(args.manifest)
+        split_paths = manifest_paths(manifest)
+        prior = json.loads(prior_path.read_text(encoding="utf-8-sig")) if prior_path.is_file() else {}
     except (OSError, KeyError, ValueError) as error:
         parser.error(str(error))
 
@@ -513,7 +527,17 @@ def main():
             if not target.resolve().is_relative_to(root):
                 parser.error(f"Destination escapes data root: {relative}")
             try:
-                results[relative] = {"status": "existing", **image_info(target.read_bytes())}
+                info = image_info(target.read_bytes())
+                previous = prior.get("files", {}).get(relative, {})
+                details = {}
+                if previous.get("sha256") == info["sha256"]:
+                    details = {key: value for key, value in previous.items() if key.startswith("source_")}
+                    if prior.get("revision"):
+                        details.setdefault("source_revision", prior["revision"])
+                known_revision = details.get("source_revision")
+                if args.revision and known_revision and known_revision != args.revision:
+                    parser.error(f"{relative} is recorded at {known_revision}. Use the matching revision or a separate data root.")
+                results[relative] = {"status": "existing", **info, **details}
             except FileNotFoundError:
                 results[relative] = {"status": "missing", "reason": "File is absent."}
             except (OSError, ValueError, SyntaxError, Image.DecompressionBombError) as error:
@@ -528,6 +552,9 @@ def main():
     elif args.source_root:
         source = str(args.source_root.resolve())
     report = Report(report_path, source, results, transfer)
+    verified_revisions = {entry.get("source_revision") for entry in results.values() if entry["status"] == "existing"}
+    if len(verified_revisions) == 1:
+        report.details["revision"] = next(iter(verified_revisions))
 
     def record(relative, body, detail, *, replace=True):
         if body is None:
@@ -545,7 +572,7 @@ def main():
     try:
         if not args.check_only and any(pending.values()):
             if args.source_root is None:
-                run_hub(root, split_paths, pending, transfer, args.workers, report, record)
+                run_hub(root, split_paths, pending, transfer, args.workers, report, record, args.revision)
             else:
                 for split, remaining in pending.items():
                     for name, body, reason in local_images(args.source_root, split, remaining):

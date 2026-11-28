@@ -1,45 +1,165 @@
-包: numpy pillow scikit-learn tqdm matplotlib requests torch torchvision
+# OCL & CLIP — RHOS Stage 0 Assessment
 
-clip :
-> python -m pip install git+https://github.com/openai/CLIP.git
+Zero-shot object category, attribute and affordance prediction on an audited subset of the OCL test set using pretrained OpenAI CLIP.
 
-## OCL Stage 0 数据准备
+- OCL: [Beyond Object Recognition: A New Benchmark towards Object Concept Learning (ICCV 2023)](https://openaccess.thecvf.com/content/ICCV2023/html/Li_Beyond_Object_Recognition_A_New_Benchmark_towards_Object_Concept_Learning_ICCV_2023_paper.html)
+- [Official OCL repository](https://github.com/silicx/ObjectConceptLearning)
+- [OpenAI CLIP](https://github.com/openai/CLIP)
 
-在 Python 3.11 的 `ocl` 环境中运行数据脚本。官方 OCL 仓库默认位于相邻的 `../ObjectConceptLearning`，校验脚本从其 `data/resources/` 读取测试集标注、属性词表和可供性词表。路径不同时可以传入 `--resources`。
+## 1. Results 
 
-`notebooks/top-10.ipynb` 记录原始 Top 10 筛选。校验脚本从官方测试集复算每个类别的实例数，并核对 `data/image_manifest.json` 的路径集合。图片按该清单的原始相对路径放在 `data/ImageNet/`、`data/COCO/`、`data/from_web/`。
+CLIP ViT-B/32, 10 candidate object categories, 11,231 valid object instances, no training or fine-tuning.
 
-- **ImageNet** 已收齐目标子集。`scripts/download_imagenet.py` 和 `scripts/imagenet_parquet.py` 保留原始 JPEG，并使用 Hugging Face 本机登录与分片范围读取。历史证据位于 `data/imagenet_download_report.json` 和 `data/imagenet_bbox_audit/`。
-- **COCO** 已收齐原始清单的 3,359 张目标 JPEG，其中 train2014 有 1,308 张，val2014 有 2,051 张。运行 `python scripts/download_coco.py` 可从官方 S3 源和原图片站补齐本地缺失文件。默认使用 8 个并发，保留 split 路径与原始字节，并跳过已经完整解码的文件。续跑使用同一命令，进度、SHA-256 和失败原因记录在 `data/coco_download_report.json`。
-- **Web** 人工恢复已收尾。`scripts/download_web.py`、`scripts/recover_web.py`、`tools/recover_web.html` 和 `data/web_recovery/` 保留自动与人工恢复依据。`data/web_download_report.json` 记录每张图的来源和 SHA-256，`data/web_missing.csv` 记录最终 Web 缺失项。历史坐标抽查证据位于 `data/web_bbox_audit/`。
+| Metric | Baseline (word) |
+|---|---:|
+| Top-1 Accuracy | 88.42% |
+| Top-3 Accuracy | 97.66% |
+| Top-5 Accuracy | 99.22% |
+| Attribute mAP | 13.87% |
+| Affordance mAP | 31.43% |
 
-### 离线收录和校验
+| Affordance prompt | Unique prompts | mAP | Pairwise disambiguation accuracy |
+|---|---:|---:|---:|
+| Word only | 147 | 31.43% | 50.00% |
+| Definition only | 165 | 31.97% | 53.83% |
+| Word + definition | 170 | 32.57% | 54.65% |
 
-本次浏览器记录已保存到 `data/final_audit/manual_browser_progress.json`。它包含一个 `statuses` 对象，键为 manifest 路径，值为 `success`、`invalid` 或 `skipped`。收录脚本用人工成功标记、官方 URL 和 Windows 下载文件的来源信息核对对应关系。默认输出预检结果，传入 `--apply` 后才复制原始字节并更新来源报告，可用 `--downloads` 指定下载目录。
+The evaluation covers 98.62% of the original Top 10 object instances. These are zero-shot results on the selected audited subset, not directly comparable with full-benchmark OCL results. Prompt comparisons are exploratory.
 
-```powershell
+## 2. Environment 
+
+The experiments were developed in a Conda environment with Python 3.11 and tested locally using CUDA.
+
+```bash
+conda create -n ocl python=3.11 -y
+conda activate ocl
+python -m pip install -r requirements.txt
+```
+
+For GPU inference, install a compatible CUDA-enabled PyTorch and torchvision build using the instructions at [pytorch.org](https://pytorch.org/get-started/locally/). OpenAI CLIP should be installed from its official repository, rather than an unrelated package named `clip` on PyPI:
+
+```bash
+python -m pip install git+https://github.com/openai/CLIP.git
+```
+
+If the installed requirements already include the Git dependency, the last command is unnecessary. Git is required to install CLIP from GitHub.
+
+## 3. Data preparation 
+
+Clone the official OCL repository separately, or obtain its original resource files. The data preparation scripts were developed with the official repository at `../ObjectConceptLearning`. For evaluation, the default resource directory is `data/resources/` in this project; `--resource-root` can point to the official resource directory instead.
+
+`notebooks/top-10.ipynb` records the original Top 10 selection. The original annotation and `data/image_manifest.json` define the target subset. Keep image paths relative to `data/`, including the original source directories.
+
+```text
+data/
+├── ImageNet/
+├── COCO/
+├── from_web/
+├── resources/
+│   ├── OCL_class_attribute.json
+│   └── OCL_class_affordance.json
+├── image_manifest.json
+├── final_audit/
+│   └── valid_instances.csv
+└── cache/                         # generated during evaluation
+```
+
+The final evaluation additionally depends on the audited image files referenced in `valid_instances.csv`. The original `OCL_annot_test.pkl` and other official resource files are required for data preparation, although inference reads the audited CSV and the two label vocabularies directly.
+
+### Image acquisition
+
+| Source | Expected images | Acquired | Valid images |
+|---|---:|---:|---:|
+| ImageNet | 309 | 309 | 309 |
+| COCO | 3,359 | 3,359 | 3,359 |
+| Web | 483 | 401 | 397 |
+| Total | 4,151 | 4,069 | 4,065 |
+
+- **ImageNet:** `scripts/download_imagenet.py` and `scripts/imagenet_parquet.py` retrieve the required original JPEG bytes using Hugging Face authentication, Parquet metadata and HTTP Range requests. See `data/imagenet_download_report.json` and `data/imagenet_bbox_audit/` for previous results and coordinate evidence. Access to the gated dataset may require authorization.
+- **COCO:** `python scripts/download_coco.py` downloads the 3,359 target images from the original sources, preserves the split paths and skips already decodable files. Results and SHA-256 hashes are recorded in `data/coco_download_report.json`.
+- **Web:** `scripts/download_web.py`, `scripts/recover_web.py`, `tools/recover_web.html` and `data/web_recovery/` document automatic and manual recovery. `data/web_download_report.json` records sources and hashes; `data/web_missing.csv` records remaining missing images. The original `from_web.tgz`, original URLs, Wayback Machine and manual browser recovery were used.
+
+The exact recovered Web subset cannot be guaranteed by downloading again: URLs and archive availability may change, and 31 images were recovered manually. Obtain matching image bytes where possible and verify against the recorded hashes. Follow the original datasets' access and redistribution terms.
+
+### Manual import and final audit 
+
+The browser progress record in `data/final_audit/manual_browser_progress.json` contains a `statuses` object with manifest paths and `success`, `invalid` or `skipped` statuses. The import script checks the recorded URLs and downloaded files; `--apply` performs the actual import. `--downloads` specifies an alternative download directory. The audit script accepts `--resources` when the official annotation path differs from the default.
+
+```bash
 python scripts/import_manual_web.py
 python scripts/import_manual_web.py --apply
 python scripts/audit_dataset.py
 ```
 
-`data/final_audit/` 存放当前结果。
+These are the original workflow commands; check the corresponding scripts' options and prerequisites before rerunning. Manual import requires the matching previously downloaded files or a new recovery attempt.
 
-| 文件 | 用途 |
-| --- | --- |
-| `summary.json` | 三个来源和 Top 10 的覆盖率、坐标规则及证据、重复检查 |
-| `valid_images.json` | 与原始 manifest 同结构，每张图至少有一个有效目标实例 |
-| `valid_instances.csv` | 有效实例、原始对象索引、标签 ID 和可直接使用的裁剪框 |
-| `images.csv` | 各目标路径的获取、解码和有效状态，以及尺寸、格式和哈希 |
-| `missing_images.csv` / `anomalies.json` | 缺失项与受影响类别、解码或坐标异常及格式警告 |
-| `manual_web_import.json` | 人工下载文件与官方 URL 的匹配证据、逐框校验以及待核对文件 |
+| Audit artifact | Purpose |
+|---|---|
+| `summary.json` | Coverage, coordinate rules, evidence and duplicate checks |
+| `valid_images.json` | Images containing at least one valid target object |
+| `valid_instances.csv` | Valid object instances, label IDs and final crop boxes |
+| `images.csv` | Image status, dimensions, format and hashes |
+| `missing_images.csv`, `anomalies.json` | Missing images and invalid instances |
+| `manual_web_import.json` | Manual import and matching evidence |
 
-### 后续 Dataset 取样口径
+### Bounding boxes 
 
-按 `valid_instances.csv` 的 `path` 和从 0 开始的 `object_index` 取样。同一张图可能同时含有效框与异常框。按图像文件实际格式解码，保持原始像素方向。
+ImageNet boxes were empirically mapped from a 256 × 256 coordinate space using `x * W / 256` and `y * H / 256`. On 72 validation reference boxes, median IoU improved from 0.243 to 0.931. This convention is inferred from evidence, not confirmed by the original authors. COCO and Web boxes use original pixel XYXY coordinates. All 10,108 COCO target boxes were in bounds under XYXY; interpreting them as native COCO XYWH would make 8,253 boxes out of bounds.
 
-- ImageNet 用 `x × W / 256` 和 `y × H / 256` 回到原图坐标。此前对 72 个验证集定位框的中位 IoU 从 0.243 提高到 0.931。
-- Web 用原图像素 XYXY。此前抽查已确认偏移的两个版本及本次发现的严重越界、空裁剪均从有效实例中排除。
-- COCO 在 OCL 中使用原图像素 XYXY。审计了全部 10,108 个目标框，按 XYXY 解释均在图像范围内。按原生 COCO API 的 XYWH 解释时有 8,253 个框会越界。统计见 `data/final_audit/summary.json` 的 `bbox_evidence.COCO`。[COCO 官方 API](https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/pycocotools/coco.py#L267-L269)
+Slightly out-of-bounds boxes are clipped and rounded in the audit; invalid boxes are excluded. Decode actual image formats and retain original pixel orientation. Inference uses `crop_xyxy` directly, without a second coordinate transformation.
 
-轻微越界时，先裁到图像范围，再对左上角向下取整、右下角向上取整。标签使用官方词表里的零基索引。可直接读取报告中的 `crop_xyxy`，无需在 Dataset 中再次映射。
+## 4. Run evaluation 
+
+Run from the repository root after preparing the audited data and label vocabularies:
+
+```bash
+python main.py --help
+python main.py --model ViT-B/32 --batch-size 4 --device cuda --prompt-mode word --use-cache
+python main.py --model ViT-B/32 --batch-size 4 --device cuda --prompt-mode definition --use-cache
+python main.py --model ViT-B/32 --batch-size 4 --device cuda --prompt-mode combined --use-cache
+```
+
+| Option | Purpose |
+|---|---|
+| `--model` | CLIP backbone; default `ViT-B/32` |
+| `--batch-size` | Number of object instances per batch; default 4 |
+| `--device` | `cuda` or `cpu` |
+| `--prompt-mode` | `word`, `definition` or `combined`; default `word` |
+| `--data-root` | Alternative data directory |
+| `--resource-root` | Alternative vocabulary directory |
+| `--output-dir` | Alternative result directory |
+| `--use-cache` | Load or save cached image features |
+
+Example using vocabularies from the official repository:
+
+```bash
+python main.py --resource-root ../ObjectConceptLearning/data/resources --use-cache
+```
+
+With caching enabled, the first run generates image embeddings and the following runs reuse them if the cache key matches. Prompt changes do not require re-encoding images. Omit `--use-cache` to perform fresh image inference. Results and configuration are saved as timestamped JSON files under `outputs/` by default.
+
+The cache key incorporates the model name, audited CSV, vocabularies and relevant source code. If actual image bytes, model weights or preprocessing dependencies change, regenerate the cache or rerun without caching; the current key does not independently track all of these changes.
+
+## 5. Project organization 
+
+| Path | Purpose |
+|---|---|
+| `main.py` | Command-line evaluation entry point |
+| `src/dataset.py` | Object-level Dataset and image preprocessing |
+| `src/model.py` | CLIP loading and normalized feature extraction |
+| `src/prompts.py` | Prompt construction |
+| `src/metrics.py` | Top-k accuracy, AP and mAP |
+| `src/evaluate.py` | Batch inference and feature collection |
+| `src/cache.py` | Image feature cache |
+| `notebooks/` | Data exploration, implementation tests and supplementary experiments |
+| `scripts/`, `tools/` | Data preparation and recovery tools |
+| `outputs/` | Evaluation results |
+| [report.md](report.md) | Methods, results and limitations |
+| [design.md](design.md) | Design decisions and exploratory experiments |
+| [timeline.md](timeline.md) | Development timeline |
+
+## 6. Evaluation notes
+
+The Dataset returns one cropped object per sample. Attribute and affordance AP are calculated across all valid object instances for each label, then averaged over labels with at least one positive instance. The pairwise disambiguation metric is a supplementary diagnostic, not an official OCL metric; its implementation and experiments are recorded in the prompt analysis notebook and report.
+
+Local command-line reproduction of the three prompt experiments has been tested. Exact independent reproduction of the recovered Web subset and execution in a fresh environment have not yet been verified.

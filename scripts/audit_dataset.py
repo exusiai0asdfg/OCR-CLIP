@@ -13,7 +13,7 @@ import re
 
 from PIL import Image
 
-from download_web import IMAGE_ERRORS, RESOURCE, ROOT, image_info, read_json, write_json
+from download_web import IMAGE_ERRORS, ROOT, image_info, read_json, write_json
 from download_imagenet import atomic_write
 
 
@@ -55,13 +55,18 @@ def label_issues(obj, sizes):
 def load_selection(data, resources):
     manifest_bytes = (data / "image_manifest.json").read_bytes()
     manifest = json.loads(manifest_bytes.decode("utf-8-sig"))
-    annotation_bytes = (resources / "OCL_annot_test.pkl").read_bytes()
+    resource_bytes = {
+        name: (resources / name).read_bytes()
+        for name in ("OCL_annot_test.pkl", "OCL_class_object.json",
+                     "OCL_class_attribute.json", "OCL_class_affordance.json")
+    }
+    annotation_bytes = resource_bytes["OCL_annot_test.pkl"]
     rows = AnnotationReader(io.BytesIO(annotation_bytes)).load()
     categories = Counter(obj["obj"] for row in rows for obj in row["objects"])
     top = dict(categories.most_common(10))
     selected = {source: {} for source in SOURCES}
     sizes = {
-        key: len(read_json(resources / f"OCL_class_{name}.json"))
+        key: len(json.loads(resource_bytes[f"OCL_class_{name}.json"].decode("utf-8-sig")))
         for key, name in (("attr", "attribute"), ("aff", "affordance"))
     }
     release_labels = Counter()
@@ -93,6 +98,7 @@ def load_selection(data, resources):
     evidence = {
         "manifest_sha256": sha256(manifest_bytes).hexdigest(),
         "annotation_sha256": sha256(annotation_bytes).hexdigest(),
+        "resource_sha256": {name: sha256(body).hexdigest() for name, body in resource_bytes.items()},
         "vocabulary_sizes": sizes,
         "release_instances_checked_for_labels": sum(categories.values()),
         "release_label_issue_counts": dict(release_labels),
@@ -187,9 +193,13 @@ def image_warnings(path, source, meta, provenance):
 def audit(data, resources, output):
     manifest, selected, top, evidence = load_selection(data, resources)
     provenance = {}
+    imagenet_revision = None
     for name in ("imagenet_download_report.json", "web_download_report.json", "coco_download_report.json"):
         if (data / name).is_file():
-            provenance.update(read_json(data / name)["files"])
+            report = read_json(data / name)
+            provenance.update(report["files"])
+            if name == "imagenet_download_report.json":
+                imagenet_revision = report.get("revision")
 
     stats = {source: Counter() for source in SOURCES}
     format_counts = {source: Counter() for source in SOURCES}
@@ -369,19 +379,33 @@ def audit(data, resources, output):
         "format", "frames", "exif_orientation", "bytes", "sha256", "pixel_sha256", "provenance", "warnings",
         "decode_error",
     ))
-    csv_output(output / "valid_instances.csv", valid_instances, (
+    instances_path = output / "valid_instances.csv"
+    csv_output(instances_path, valid_instances, (
         "source", "path", "object_index", "category", "width", "height", "sha256", "raw_xyxy",
         "mapped_xyxy", "crop_xyxy", "clipped", "attribute_ids", "affordance_ids",
     ))
+    write_json(output / "snapshot.json", {
+        "schema": 1,
+        "inputs": {
+            "manifest_sha256": evidence["manifest_sha256"],
+            "resource_sha256": evidence["resource_sha256"],
+        },
+        "categories": list(top),
+        "instances_sha256": sha256(instances_path.read_bytes()).hexdigest(),
+        "images": overall["valid_images"],
+        "instances": overall["valid_instances"],
+        "imagenet_report_revision": imagenet_revision,
+    })
     return summary
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=ROOT / "data")
-    parser.add_argument("--resources", type=Path, default=RESOURCE)
+    parser.add_argument("--data", "--data-root", type=Path, default=ROOT / "data")
+    parser.add_argument("--resources", type=Path, help="Defaults to resources under the data root")
+    parser.add_argument("--output-dir", type=Path, help="Defaults to final_audit under the data root")
     args = parser.parse_args()
-    report = audit(args.data, args.resources, args.data / "final_audit")
+    report = audit(args.data, args.resources or args.data / "resources", args.output_dir or args.data / "final_audit")
     print(json.dumps(report["overall"], indent=2))
 
 

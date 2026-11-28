@@ -1,0 +1,23 @@
+{
+    "config": {
+        "model": "ViT-B/32",
+        "batch_size": 4,
+        "device": "cuda",
+        "prompt_mode": "word",
+        "num_instances": 11231,
+        "num_images": 4065,
+        "dataset_snapshot": "0e37dbc48e6e7e62fd4a604a2513e884bface94a2f4f9ead9ee5c53325340962",
+        "weights_sha256": "40d365715913c9da98579312b702a82c18be219cc2a73407c4526f58eba950af",
+        "cache_key": "d5429462dd8094166e2f24aeefcd5fb67940c6326cecaa294a77f5d703e38f47",
+        "cache_hit": true
+    },
+    "metrics": {
+        "top1_accuracy": 0.8842489719390869,
+        "top3_accuracy": 0.9765826463699341,
+        "top5_accuracy": 0.9921645522117615,
+        "attribute_map": 0.13873603395665532,
+        "valid_attribute_classes": 93,
+        "affordance_map": 0.31425949909416717,
+        "valid_affordance_classes": 161
+    }
+}

@@ -1,0 +1,4 @@
+-r requirements.txt
+ipykernel==7.4.0
+matplotlib==3.11.2
+requests==2.34.2

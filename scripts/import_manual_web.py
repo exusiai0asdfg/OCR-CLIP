@@ -1,4 +1,4 @@
-"""Import verified Windows browser downloads into the OCL Web manifest offline."""
+"""Import browser downloads or verify a portable Web recovery manifest offline."""
 
 import argparse
 from collections import Counter, defaultdict
@@ -14,7 +14,7 @@ from urllib.parse import unquote, urlsplit, urlunsplit
 from audit_dataset import check_box, csv_output, load_selection
 from download_imagenet import atomic_write
 from download_web import (
-    IMAGE_ERRORS, RESOURCE, ROOT, image_info, load_inputs, read_json, same_url, url_ok, write_json,
+    IMAGE_ERRORS, ROOT, image_info, load_inputs, read_json, same_url, url_ok, write_json,
 )
 
 
@@ -227,15 +227,48 @@ def run(args):
     }, indent=2))
 
 
+def verify_sources(data, source_list):
+    targets = set(read_json(data / "image_manifest.json")["from_web"])
+    files = source_list["files"]
+    if source_list.get("schema") != 1 or not isinstance(files, dict) or not files:
+        raise ValueError("Expected a nonempty Web recovery source list")
+    for name, entry in sorted(files.items()):
+        if name not in targets or not re.fullmatch(r"from_web/test_\d+\.(?:jpg|jpeg|png)", name):
+            raise ValueError(f"Unexpected Web recovery path: {name}")
+        path = data / name
+        if not path.resolve().is_relative_to(data.resolve()):
+            raise ValueError(f"Web recovery path escapes the data root: {path}")
+        if sha256(path.read_bytes()).hexdigest() != entry["sha256"]:
+            raise ValueError(f"Manual Web image SHA-256 mismatch: {path}")
+    print(f"Verified {len(files)} manually recovered images by SHA-256")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--data", type=Path, default=ROOT / "data")
-    parser.add_argument("--resources", type=Path, default=RESOURCE)
+    parser.add_argument("--data", "--data-root", type=Path, default=ROOT / "data")
+    parser.add_argument("--resources", type=Path, help="Defaults to resources under the data root")
     parser.add_argument("--downloads", type=Path, default=Path.home() / "Downloads")
     parser.add_argument("--progress", type=Path, help="Snapshot of offline recovery progress, with a statuses object.")
     parser.add_argument("--since", type=datetime.fromisoformat, help="List unmatched image downloads since a local ISO timestamp.")
-    parser.add_argument("--apply", action="store_true", help="Archive the confirmed bytes and refresh Web provenance and missing lists.")
-    run(parser.parse_args())
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--apply", action="store_true", help="Archive confirmed browser downloads")
+    mode.add_argument("--export-sources", type=Path, help="Write a portable list of verified manual recoveries")
+    mode.add_argument("--verify-sources", type=Path, help="Validate files at their manifest paths without browser metadata")
+    args = parser.parse_args()
+    args.resources = args.resources or args.data / "resources"
+    if args.export_sources:
+        report = read_json(args.data / "web_download_report.json")
+        fields = ("mapped_url", "browser_host_url", "match_evidence", "sha256", "bytes")
+        source_list = {"schema": 1, "files": {
+            name: {field: entry[field] for field in fields}
+            for name, entry in sorted(report["files"].items()) if entry.get("source") == "manual_browser"
+        }}
+        verify_sources(args.data, source_list)
+        write_json(args.export_sources, source_list)
+    elif args.verify_sources:
+        verify_sources(args.data, read_json(args.verify_sources))
+    else:
+        run(args)
 
 
 if __name__ == "__main__":

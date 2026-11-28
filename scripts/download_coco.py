@@ -128,15 +128,15 @@ def save_report(path, targets, names, files, downloaded, skipped):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=ROOT / "data/image_manifest.json")
+    parser.add_argument("--manifest", type=Path)
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--workers", type=int, choices=range(1, 17), default=8, metavar="1..16")
     parser.add_argument("--limit", type=int, help="Process the first N targets from each split as a smoke test.")
     args = parser.parse_args()
     if args.limit is not None and args.limit < 1:
         parser.error("--limit must be positive.")
-    root = (args.data_root or args.manifest.parent).resolve()
-    targets = manifest_targets(args.manifest, root)
+    root = (args.data_root or (args.manifest.parent if args.manifest else ROOT / "data")).resolve()
+    targets = manifest_targets(args.manifest or root / "image_manifest.json", root)
     names = targets
     if args.limit is not None:
         names = [

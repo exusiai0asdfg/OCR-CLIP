@@ -27,7 +27,6 @@ else:
 
 
 ROOT = Path(__file__).resolve().parents[1]
-RESOURCE = ROOT.parent / "ObjectConceptLearning" / "data" / "resources"
 OFFICIAL_FOLDER = "https://drive.google.com/drive/folders/1MDBiw45vN4qvjOA8ZuGmFhjMVoSBnF"
 MAX_IMAGE_BYTES = 32 * 1024 * 1024
 WAYBACK_API = "https://archive.org/wayback/available"
@@ -345,8 +344,9 @@ def write_report(path, archive, files, mapping, selection):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=ROOT/"data/image_manifest.json")
-    parser.add_argument("--mapping", type=Path, default=RESOURCE/"url_to_filename.json")
+    parser.add_argument("--manifest", type=Path)
+    parser.add_argument("--mapping", type=Path, help="Override the official URL mapping")
+    parser.add_argument("--resources", type=Path, help="Defaults to resources under the data root")
     parser.add_argument("--data-root", type=Path)
     parser.add_argument("--archive", type=Path, help="Official from_web.tgz file (default: data-root/from_web.tgz).")
     parser.add_argument("--report", type=Path)
@@ -358,9 +358,10 @@ def main():
     args = parser.parse_args()
     if (args.limit is not None and args.limit <= 0) or args.wayback_limit < 0:
         parser.error("The sample limit must be positive and the archive lookup limit nonnegative.")
-    root = (args.data_root or args.manifest.parent).resolve()
+    root = (args.data_root or (args.manifest.parent if args.manifest else ROOT / "data")).resolve()
     report = args.report or root / ("web_sample_report.json" if args.limit else "web_download_report.json")
-    targets, mapping = load_inputs(args.manifest, args.mapping)
+    resources = args.resources or root / "resources"
+    targets, mapping = load_inputs(args.manifest or root / "image_manifest.json", args.mapping or resources / "url_to_filename.json")
     names = targets[:args.limit]
     prior = read_json(report).get("files", {}) if report.is_file() else {}
     files = {}

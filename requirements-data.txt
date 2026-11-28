@@ -1,0 +1,10 @@
+Pillow==13.0.0
+requests==2.34.2
+urllib3==2.8.0
+pyarrow==26.0.1
+thriftpy2==0.7.2
+surt==0.3.1
+warcio==1.8.2
+numpy==2.4.6
+matplotlib==3.11.2
+huggingface_hub==2.4.0

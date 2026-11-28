@@ -1,0 +1,19 @@
+{
+    "config": {
+        "model": "ViT-B/32",
+        "batch_size": 4,
+        "device": "cuda",
+        "prompt_mode": "definition",
+        "num_instances": 11231,
+        "cache_key": "8b2b18f46200e1561a60c19f689e8eeb5d3dfe62a4efbceaaeb45029be7e0cbf"
+    },
+    "metrics": {
+        "top1_accuracy": 0.8842489719390869,
+        "top3_accuracy": 0.9765826463699341,
+        "top5_accuracy": 0.9921645522117615,
+        "attribute_map": 0.13873603395665532,
+        "affordance_map": 0.3197331683835176,
+        "valid_attribute_classes": 93,
+        "valid_affordance_classes": 161
+    }
+}
