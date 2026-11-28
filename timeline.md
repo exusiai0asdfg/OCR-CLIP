@@ -10,7 +10,7 @@
     - 在 Codex 协助下，通过 Hugging Face、Parquet 元数据和 HTTP Range 请求获取全部 309 张 ImageNet 图片。
    - 发现 ImageNet 标注框与原图坐标不匹配，通过定位标注与 IoU 对比验证 256×256 坐标转换方案。
    - 尝试原始 URL、官方归档、Wayback Machine 和 Common Crawl 等方式恢复 Web 图片，并人工找回 31 张图片。
-     - 一则趣闻:其中一张来自宜宾新闻的[船的照片]((http://www.ybxww.com/content/2012-10/8/xinhua_sc_yibin20121081011208807032.jpg))直接访问会跳转到宜宾新闻首页,但是经过查询发现有一个`past.ybxww.com`专门存放老新闻,于是将www改为past成功获得该图片
+     - 一则趣闻:其中一张来自宜宾新闻的[船的照片](http://www.ybxww.com/content/2012-10/8/xinhua_sc_yibin20121081011208807032.jpg)直接访问会跳转到宜宾新闻首页,但是经过查询发现有一个`past.ybxww.com`专门存放老新闻,于是将www改为past成功获得该图片
    - 最终获取 401/483 张 Web 图片,仍缺失 82 张
 4. 11.28 早上+中午+下午
     - 完成dataset和dataloader
